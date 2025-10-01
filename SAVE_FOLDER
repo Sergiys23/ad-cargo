@@ -1,0 +1,60 @@
+import os
+from datetime import datetime
+from telegram import Update, InputFile
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
+
+# Папка для збереження фото
+SAVE_FOLDER = "photos"
+os.makedirs(SAVE_FOLDER, exist_ok=True)
+
+# --- /start ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Привіт! Надішли мені фото, і я збережу його з датою.\n"
+        "Щоб побачити галерею всіх фото, надішли команду /gallery"
+    )
+
+# --- Обробка фото ---
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    photo = update.message.photo[-1]  # Найбільше за розміром
+    file = await photo.get_file()
+
+    # Форматування імені файлу
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"photo_{timestamp}_user{user_id}.jpg"
+    filepath = os.path.join(SAVE_FOLDER, filename)
+
+    # Завантаження файлу
+    await file.download_to_drive(filepath)
+
+    await update.message.reply_text(f"Фото збережено як {filename}")
+
+# --- /gallery ---
+async def gallery(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    files = os.listdir(SAVE_FOLDER)
+    if not files:
+        await update.message.reply_text("Поки що немає жодного фото у галереї.")
+        return
+
+    # Відправляємо максимум 10 фото за раз
+    media_to_send = files[:10]
+
+    for f in media_to_send:
+        filepath = os.path.join(SAVE_FOLDER, f)
+        await update.message.reply_photo(photo=InputFile(filepath))
+
+    if len(files) > 10:
+        await update.message.reply_text("У галереї більше фото, ніж я можу надіслати одночасно.")
+
+# --- Запуск бота ---
+if __name__ == '__main__':
+    TOKEN = "8282093683:AAFWSRPr4WFLWXmK_f5JOAnI7aANj1xK9vA"  # краще через змінні середовища
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("gallery", gallery))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+    print("Бот запущено...")
+    app.run_polling()
